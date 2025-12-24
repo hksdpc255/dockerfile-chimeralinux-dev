@@ -2,35 +2,14 @@ name: Build Image using Containerfile
 on:
   workflow_dispatch:
   schedule:
-  - cron: 30 5,17 * * *
+  - cron: 30 5 */5 * *
   push:
     branches: [ "main" ]
     paths: [ "Dockerfile" ]
 
 jobs:
-  check:
-    name: Version check
-    runs-on: ubuntu-latest
-    outputs:
-      uptodate: ${{ steps.ver-chk.outputs.uptodate }}
-    steps:
-    - name: Version check
-      id: ver-chk
-      run: |
-        if [ true = "${{ contains(fromJSON('["push", "workflow_dispatch"]'), github.event_name) }}" ] ; then
-          echo "uptodate=no" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-        CLRDEV_VER="$(curl -L 'https://quay.io/api/v1/repository/bucloud/clearlinux-dev/tag/?page=1&limit=100' | jq -r '.tags|map(select(.name=="latest").manifest_digest)[0]as$latest_digest|map(select(.manifest_digest==$latest_digest)|select(.name!="latest"))[0].name')"
-        CLR_VER="`podman run --rm --pull=always docker.io/library/clearlinux:latest sh -c '. /etc/os-release ; echo "$VERSION_ID"'`"
-        echo "Upstream version: $CLR_VER"
-        echo "  CLRDEV version: $CLRDEV_VER"
-        echo "uptodate=`[ "$CLRDEV_VER" = "$CLR_VER" ] && echo yes || echo no`" >> "$GITHUB_OUTPUT"
-      
   build:
     name: Build image
-    needs: check
-    if: needs.check.outputs.uptodate == 'no'
     runs-on: ubuntu-latest
 
     steps:
@@ -148,7 +127,7 @@ jobs:
       id: build-image
       uses: redhat-actions/buildah-build@v2
       with:
-        image: clearlinux-dev
+        image: chimeralinux-dev
         tags: latest
         containerfiles: |
           ./Dockerfile
@@ -156,9 +135,9 @@ jobs:
     - name: Get image tag
       id: get-tag
       run: |
-        CLR_VER=`podman run --rm clearlinux-dev sh -c '. /etc/os-release ; echo "$VERSION_ID"'`
-        echo "clearlinux_version_id=$CLR_VER" >> "$GITHUB_OUTPUT"
-        podman image tag clearlinux-dev:latest "clearlinux-dev:$CLR_VER"
+        CMR_VER=`date -Iseconds | sed -e 's/+00:00$//g' -e 's/[^0-9A-Za-z-]/-/g'`
+        echo "chimeralinux_version_id=$CMR_VER" >> "$GITHUB_OUTPUT"
+        podman image tag chimeralinux-dev:latest "chimeralinux-dev:$CMR_VER"
 
     - name: Push To quay.io
       id: push-to-quay
@@ -166,7 +145,7 @@ jobs:
       continue-on-error: true
       with:
         image: ${{ steps.build-image.outputs.image }}
-        tags: ${{ steps.build-image.outputs.tags }} ${{ steps.get-tag.outputs.clearlinux_version_id }}
+        tags: ${{ steps.build-image.outputs.tags }} ${{ steps.get-tag.outputs.chimeralinux_version_id }}
         registry: ${{ secrets.REGISTRY }}
         username: ${{ secrets.REGISTRY_USER }}
         password: ${{ secrets.REGISTRY_PASSWORD }}
@@ -182,7 +161,7 @@ jobs:
       run: |
         sudo mkdir /large_store/usertmp
         sudo chown runner:runner /large_store/usertmp
-        podman image save clearlinux-dev | zstd -c -T0 -19 -v -v -v > /large_store/usertmp/clearlinux-dev.docker.tar.zst
+        podman image save chimeralinux-dev | zstd -c -T0 -19 -v -v -v > /large_store/usertmp/chimeralinux-dev.docker.tar.zst
         podman system reset -f
 
     - name: Upload image as artifact
