@@ -135,7 +135,7 @@ jobs:
     - name: Get image tag
       id: get-tag
       run: |
-        CMR_VER=`date -Iseconds | sed -e 's/+00:00$//g' -e 's/[^0-9A-Za-z-]/-/g'`
+        CMR_VER=`date -Iseconds | sed -e 's/+00:00$//g' -e 's/[^0-9-]/-/g'`
         echo "chimeralinux_version_id=$CMR_VER" >> "$GITHUB_OUTPUT"
         podman image tag chimeralinux-dev:latest "chimeralinux-dev:$CMR_VER"
 
@@ -169,5 +169,5 @@ jobs:
       uses: actions/upload-artifact@v4
       continue-on-error: true
       with:
-        name: clearlinux-dev-${{ steps.get-tag.outputs.clearlinux_version_id }}.docker.tar.zst
-        path: /large_store/usertmp/clearlinux-dev.docker.tar.zst
+        name: chimeralinux-dev-${{ steps.get-tag.outputs.chimeralinux_version_id }}.docker.tar.zst
+        path: /large_store/usertmp/chimeralinux-dev.docker.tar.zst
