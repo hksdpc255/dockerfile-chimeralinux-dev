@@ -1,0 +1,194 @@
+name: Build Image using Containerfile
+on:
+  workflow_dispatch:
+  schedule:
+  - cron: 30 5,17 * * *
+  push:
+    branches: [ "main" ]
+    paths: [ "Dockerfile" ]
+
+jobs:
+  check:
+    name: Version check
+    runs-on: ubuntu-latest
+    outputs:
+      uptodate: ${{ steps.ver-chk.outputs.uptodate }}
+    steps:
+    - name: Version check
+      id: ver-chk
+      run: |
+        if [ true = "${{ contains(fromJSON('["push", "workflow_dispatch"]'), github.event_name) }}" ] ; then
+          echo "uptodate=no" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        CLRDEV_VER="$(curl -L 'https://quay.io/api/v1/repository/bucloud/clearlinux-dev/tag/?page=1&limit=100' | jq -r '.tags|map(select(.name=="latest").manifest_digest)[0]as$latest_digest|map(select(.manifest_digest==$latest_digest)|select(.name!="latest"))[0].name')"
+        CLR_VER="`podman run --rm --pull=always docker.io/library/clearlinux:latest sh -c '. /etc/os-release ; echo "$VERSION_ID"'`"
+        echo "Upstream version: $CLR_VER"
+        echo "  CLRDEV version: $CLRDEV_VER"
+        echo "uptodate=`[ "$CLRDEV_VER" = "$CLR_VER" ] && echo yes || echo no`" >> "$GITHUB_OUTPUT"
+      
+  build:
+    name: Build image
+    needs: check
+    if: needs.check.outputs.uptodate == 'no'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Invoke subset of free_disk_space.sh from apache/flink and action.yml from easimon/maximize-build-space
+      run: |
+        echo "=============================================================================="
+        echo "Freeing up disk space on CI system"
+        echo "=============================================================================="
+        
+        echo "Listing 100 largest packages"
+        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
+        df -h
+        echo "Removing large packages"
+        sudo apt-get purge -y '^dotnet-.*' || :
+        sudo apt-get purge -y '^llvm-.*' || :
+        sudo apt-get purge -y 'php.*' || :
+        sudo apt-get purge -y '^mongodb-.*' || :
+        sudo apt-get purge -y '^mysql-.*' || :
+        sudo apt-get purge -y '^google-chrome.*' || :
+        sudo apt-get purge -y '^microsoft-edge.*' || :
+        sudo apt-get purge -y '^temurin-.*' || :
+        sudo apt-get purge -y azure-cli google-cloud-sdk hhvm firefox powershell mono-devel libgl1-mesa-dri || :
+        sudo apt-get autoremove -y --purge
+        sudo apt-get clean
+        df -h
+        echo "Removing large directories"
+        sudo rm -rf /usr/share/dotnet/
+        sudo rm -rf /usr/local/graalvm/
+        sudo rm -rf /usr/local/.ghcup/
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /usr/local/share/chromium
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo rm -rf ~/.rustup ~/.dotnet
+        echo "Prune container images"
+        sudo docker system prune -a -f || :
+        sudo podman system reset -f || :
+        podman system reset -f || :
+        df -h
+
+    - name: Maximize build space from easimon/maximize-build-space with btrfs:zstd:3 patch
+      run: |
+        BUILD_MOUNT_PATH=/large_store
+        VG_NAME=buildvg
+
+        sudo mkdir -p "${BUILD_MOUNT_PATH}"
+        
+        # github runners have an active swap file in /mnt/swapfile
+        # we want to reuse the temp disk, so first unmount swap and clean the temp disk
+        echo "Unmounting and removing swap file."
+        sudo swapoff -a
+        sudo rm -f /mnt/swapfile
+        
+        echo "Creating LVM Volume."
+        echo "  Creating LVM PV on root fs."
+        # create loop pv image on root fs
+        ROOT_RESERVE_KB=$(expr 512 \* 1024)
+        ROOT_FREE_KB=$(df --block-size=1024 --output=avail / | tail -1)
+        ROOT_LVM_SIZE_KB=$(expr $ROOT_FREE_KB - $ROOT_RESERVE_KB)
+        ROOT_LVM_SIZE_BYTES=$(expr $ROOT_LVM_SIZE_KB \* 1024)
+        sudo touch /pv.img && sudo fallocate -z -l "${ROOT_LVM_SIZE_BYTES}" /pv.img
+        export ROOT_LOOP_DEV=$(sudo losetup --find --show /pv.img)
+        sudo pvcreate -f "${ROOT_LOOP_DEV}"
+        
+        # create pv on temp disk
+        echo "  Creating LVM PV on temp fs."
+        TMP_RESERVE_KB=$(expr 100 \* 1024)
+        TMP_FREE_KB=$(df --block-size=1024 --output=avail /mnt | tail -1)
+        TMP_LVM_SIZE_KB=$(expr $TMP_FREE_KB - $TMP_RESERVE_KB)
+        TMP_LVM_SIZE_BYTES=$(expr $TMP_LVM_SIZE_KB \* 1024)
+        sudo touch /mnt/tmp-pv.img && sudo fallocate -z -l "${TMP_LVM_SIZE_BYTES}" /mnt/tmp-pv.img
+        export TMP_LOOP_DEV=$(sudo losetup --find --show /mnt/tmp-pv.img)
+        sudo pvcreate -f "${TMP_LOOP_DEV}"
+        
+        # create volume group from these pvs
+        sudo vgcreate "${VG_NAME}" "${TMP_LOOP_DEV}" "${ROOT_LOOP_DEV}"
+        
+        echo "Recreating swap"
+        # create and activate swap
+        sudo lvcreate -L 1024M -n swap "${VG_NAME}"
+        sudo mkswap "/dev/mapper/${VG_NAME}-swap"
+        sudo swapon "/dev/mapper/${VG_NAME}-swap"
+        
+        echo "Creating build volume"
+        # create and mount build volume
+        sudo lvcreate -l 100%FREE -n buildlv "${VG_NAME}"
+        sudo mkfs.btrfs -m single -d single -K -f "/dev/mapper/${VG_NAME}-buildlv"
+        sudo mount -o autodefrag,noatime,nobarrier,nodiscard,noflushoncommit,notreelog,compress=zstd:3,commit=432000 "/dev/mapper/${VG_NAME}-buildlv" "${BUILD_MOUNT_PATH}"
+        sudo chown -R "$(id -un):$(id -gn)" "${BUILD_MOUNT_PATH}"
+
+    - name: Move podman storage to build space
+      run: |
+        sudo systemctl stop docker.service docker.socket || true
+        sudo systemctl stop podman.service podman.socket || true
+        systemctl --user stop podman.service podman.socket || true
+        sudo cp -va /var/lib/containers /large_store/sys-stor || sudo mkdir /large_store/sys-stor
+        sudo mkdir /large_store/usr-stor && sudo chown runner:runner /large_store/usr-stor
+        [ ! -d ~/.local/share/containers ] || cp -va ~/.local/share/containers/. /large_store/usr-stor/.
+        sudo rm -vrf /var/lib/containers ~/.local/share/containers
+        sudo ln -srv /large_store/sys-stor /var/lib/containers || :
+        ln -srv /large_store/usr-stor ~/.local/share/containers || :
+        sudo cp -va /var/tmp /large_store/vartmp
+        sudo rm -vrf /var/tmp
+        sudo ln -srv /large_store/vartmp /var/tmp
+        #sudo cp -va /home/runner /large_store/runner_home
+        #sudo rm -vrf /home/runner
+        #sudo ln -vsr /large_store/runner_home /home/runner
+        sudo systemctl start docker.socket || :
+        sudo systemctl start podman.socket || :
+        systemctl --user start podman.socket || :
+
+    - uses: actions/checkout@v4
+
+    - name: Buildah Action
+      id: build-image
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: clearlinux-dev
+        tags: latest
+        containerfiles: |
+          ./Dockerfile
+
+    - name: Get image tag
+      id: get-tag
+      run: |
+        CLR_VER=`podman run --rm clearlinux-dev sh -c '. /etc/os-release ; echo "$VERSION_ID"'`
+        echo "clearlinux_version_id=$CLR_VER" >> "$GITHUB_OUTPUT"
+        podman image tag clearlinux-dev:latest "clearlinux-dev:$CLR_VER"
+
+    - name: Push To quay.io
+      id: push-to-quay
+      uses: redhat-actions/push-to-registry@v2
+      continue-on-error: true
+      with:
+        image: ${{ steps.build-image.outputs.image }}
+        tags: ${{ steps.build-image.outputs.tags }} ${{ steps.get-tag.outputs.clearlinux_version_id }}
+        registry: ${{ secrets.REGISTRY }}
+        username: ${{ secrets.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+
+    - name: Print image url
+      if: steps.push-to-quay.outcome == 'success' && steps.push-to-quay.conclusion == 'success'
+      continue-on-error: true
+      run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+
+    - name: Save image as file
+      id: save-image
+      continue-on-error: true
+      run: |
+        sudo mkdir /large_store/usertmp
+        sudo chown runner:runner /large_store/usertmp
+        podman image save clearlinux-dev | zstd -c -T0 -19 -v -v -v > /large_store/usertmp/clearlinux-dev.docker.tar.zst
+        podman system reset -f
+
+    - name: Upload image as artifact
+      if: steps.save-image.outcome == 'success' && steps.save-image.conclusion == 'success'
+      uses: actions/upload-artifact@v4
+      continue-on-error: true
+      with:
+        name: clearlinux-dev-${{ steps.get-tag.outputs.clearlinux_version_id }}.docker.tar.zst
+        path: /large_store/usertmp/clearlinux-dev.docker.tar.zst
