@@ -6,7 +6,7 @@ RUN apk add --upgrade --no-interactive \
         curl wget2 git \
         gawk patchelf \
         winetricks lldb gdb binutils ccache valgrind strace tcpdump clang-tools-extra tmux htop zip cloud-utils \
-        util-linux uusubversion mercurial base-full '!base-full-sound' '!base-full-session' '!base-full-man' \
+        util-linux subversion mercurial base-full '!base-full-sound' '!base-full-session' '!base-full-man' \
         '!base-full-locale' '!base-full-kernel' '!base-full-fonts' '!base-full-firmware' chimera-repo-user \
         && \
     apk add --no-interactive uv cppcheck hare sysstat maven python-matplotlib \
