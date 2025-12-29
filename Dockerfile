@@ -41,14 +41,15 @@ RUN mkdir -p /install/usr/lib && \
         make install DESTDIR="$(pwd)/install" && \
         cp -a install/usr/lib/*.* /install/usr/lib && \
         rm -f /install/usr/lib/libstdc++.so && \
-        BUILD_DIR="$(pwd)/libgcc-build" && \
-        mkdir -p "${BUILD_DIR}" && \
-        cd "${BUILD_DIR}" && \
-        CXXFLAGS="-fPIC -g0 -O3 -pipe -nostdinc++" CFLAGS="-fPIC -g0 -O3 -pipe" CC=gcc CXX=g++ "${GCC_SOURCE}/configure" \
-            --prefix=/usr --enable-shared --enable-static --disable-bootstrap --disable-multilib && \
-        make all-target-libgcc -j$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4) && \
-        make install-strip-target-libgcc DESTDIR="$(pwd)/install" && \
-        cp install/usr/lib/gcc/x86_64-pc-linux-musl/15.2.0/libgcc* /usr/lib/gcc/*/*.0 \
+#        BUILD_DIR="$(pwd)/libgcc-build" && \
+#        mkdir -p "${BUILD_DIR}" && \
+#        cd "${BUILD_DIR}" && \
+#        CXXFLAGS="-fPIC -g0 -O3 -pipe -nostdinc++" CFLAGS="-fPIC -g0 -O3 -pipe" CC=gcc CXX=g++ "${GCC_SOURCE}/configure" \
+#            --prefix=/usr --enable-shared --enable-static --disable-bootstrap --disable-multilib && \
+#        make all-target-libgcc -j$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4) && \
+#        make install-strip-target-libgcc DESTDIR="$(pwd)/install" && \
+#        cp install/usr/lib/gcc/x86_64-pc-linux-musl/15.2.0/libgcc* /usr/lib/gcc/*/*.0 && \
+        : \
     ) && \
     rm -rf gcc-* libstdcxx-build libgcc-build && \
     curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3)/openmp-$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3).src.tar.xz" | xzcat | tar -x && \
