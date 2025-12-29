@@ -4,11 +4,14 @@ RUN apk add --upgrade --no-interactive \
         bash-completion opendoas base-cbuild-bootstrap base-kernel-devel base-devel flatpak-builder go cargo \
         rust ruby typescript yarn java-jdk-openjdk21-default python-meta python-hatch_vcs vala opencv ffmpeg \
         curl wget2 git \
+        gawk patchelf \
         winetricks lldb gdb binutils ccache valgrind strace tcpdump clang-tools-extra tmux htop zip cloud-utils \
-        util-linux subversion mercurial base-full '!base-full-sound' '!base-full-session' '!base-full-man' \
+        util-linux uusubversion mercurial base-full '!base-full-sound' '!base-full-session' '!base-full-man' \
         '!base-full-locale' '!base-full-kernel' '!base-full-fonts' '!base-full-firmware' chimera-repo-user \
         && \
     apk add --no-interactive uv cppcheck hare sysstat maven python-matplotlib \
+        $(apk list -q util-linux-* | \
+                sed -e /util-linux-.*-.*/d -e /-man/d -e /-doc/d -e /-common/d -e /-bashcomp/d) \
         $(apk list -q *-static | sed -e /-cross-/d -e /-mallocng-/d) && \
     apk add --no-interactive libgcc-chimera libatomic-chimera && \
     rm -rf /var/cache/apk/* && \
@@ -32,14 +35,22 @@ RUN mkdir -p /install/usr/lib && \
         ln -sf "${GCC_SOURCE}/libgcc/unwind-generic.h" "${BUILD_DIR}/include/unwind.h" && \
         cd "${BUILD_DIR}" && \
         CXXFLAGS="-fPIC -g0 -O3 -pipe -nostdinc++ -I${GCC_SOURCE}/libstdc++-v3/include -I${BUILD_DIR}/include -I${GCC_SOURCE}/libgcc" \
-            CFLAGS="-fPIC -g0 -O3 -pipe" CC=gcc CXX=g++  "${GCC_SOURCE}/libstdc++-v3/configure" \
+            CFLAGS="-fPIC -g0 -O3 -pipe" CC=gcc CXX=g++ "${GCC_SOURCE}/libstdc++-v3/configure" \
                 --prefix=/usr --disable-werror --enable-shared --disable-static && \
         make -j$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4) && \
         make install DESTDIR="$(pwd)/install" && \
         cp -a install/usr/lib/*.* /install/usr/lib && \
-        rm -f /install/usr/lib/libstdc++.so \
+        rm -f /install/usr/lib/libstdc++.so && \
+        BUILD_DIR="$(pwd)/libgcc-build" && \
+        mkdir -p "${BUILD_DIR}" && \
+        cd "${BUILD_DIR}" && \
+        CXXFLAGS="-fPIC -g0 -O3 -pipe -nostdinc++" CFLAGS="-fPIC -g0 -O3 -pipe" CC=gcc CXX=g++ "${GCC_SOURCE}/configure" \
+            --prefix=/usr --enable-shared --enable-static --disable-bootstrap --disable-multilib && \
+        make all-target-libgcc -j$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4) && \
+        make install-strip-target-libgcc DESTDIR="$(pwd)/install" && \
+        cp install/usr/lib/gcc/x86_64-pc-linux-musl/15.2.0/libgcc* /usr/lib/gcc/*/*.0 \
     ) && \
-    rm -rf gcc-* libstdcxx-build && \
+    rm -rf gcc-* libstdcxx-build libgcc-build && \
     curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3)/openmp-$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3).src.tar.xz" | xzcat | tar -x && \
     ( \
         cd openmp-* && \
