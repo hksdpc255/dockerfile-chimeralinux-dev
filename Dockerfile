@@ -9,7 +9,7 @@ RUN apk add --upgrade --no-interactive \
         util-linux subversion mercurial base-full '!base-full-sound' '!base-full-session' '!base-full-man' \
         '!base-full-locale' '!base-full-kernel' '!base-full-fonts' '!base-full-firmware' chimera-repo-user \
         && \
-    apk add --no-interactive uv cppcheck hare sysstat maven python-matplotlib \
+    apk add --no-interactive uv cppcheck hare sysstat maven python-matplotlib schilytools-cdrtools \
         $(apk list -q util-linux-* | \
                 sed -e /util-linux-.*-.*/d -e /-man/d -e /-doc/d -e /-common/d -e /-bashcomp/d) \
         $(apk list -q *-static | sed -e /-cross-/d -e /-mallocng-/d) && \
