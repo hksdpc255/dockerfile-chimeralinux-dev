@@ -4,7 +4,7 @@ RUN apk add --upgrade --no-interactive \
         bash-completion opendoas base-cbuild-bootstrap base-kernel-devel base-devel flatpak-builder go cargo \
         rust ruby typescript yarn java-jdk-openjdk21-default python-meta python-hatch_vcs vala opencv ffmpeg \
         curl wget2 git \
-        gawk patchelf \
+        gawk patchelf jq ripgrep libgcc-chimera libatomic-chimera \
         winetricks lldb gdb binutils ccache valgrind strace tcpdump clang-tools-extra tmux htop zip cloud-utils \
         util-linux subversion mercurial base-full '!base-full-sound' '!base-full-session' '!base-full-man' \
         '!base-full-locale' '!base-full-kernel' '!base-full-fonts' '!base-full-firmware' chimera-repo-user \
@@ -13,7 +13,6 @@ RUN apk add --upgrade --no-interactive \
         $(apk list -q util-linux-* | \
                 sed -e /util-linux-.*-.*/d -e /-man/d -e /-doc/d -e /-common/d -e /-bashcomp/d) \
         $(apk list -q *-static | sed -e /-cross-/d -e /-mallocng-/d) && \
-    apk add --no-interactive libgcc-chimera libatomic-chimera && \
     rm -rf /var/cache/apk/* && \
     ln -srv /bin/doas /bin/sudo && \
     printf '%s\n' '' '# Give users in the wheelnopw group access.' 'permit nopass :wheelnopw' >> /etc/doas.conf && \
