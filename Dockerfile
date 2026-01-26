@@ -32,7 +32,7 @@ ENV BUILD_LDFLAGS="-g0 -O3 -flto=full -fPIC -fno-fat-lto-objects"
 RUN mkdir -p /install/usr/lib && \
     apk add --no-interactive gcc && \
     GCC_VER="$(gcc --version | head -n 1 | grep -o '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' | tail -n 1)" && \
-    curl -L "https://ftp.gnu.org/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz" | xzcat | tar -x && \
+    curl -L "https://mirrors.kernel.org/gnu/gcc/gcc-${GCC_VER}/gcc-${GCC_VER}.tar.xz" | xzcat | tar -x && \
     ( \
         GCC_SOURCE="$(pwd)/gcc-${GCC_VER}" && \
         BUILD_DIR="$(pwd)/libstdcxx-build" && \
