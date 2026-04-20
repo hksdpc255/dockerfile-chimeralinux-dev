@@ -57,7 +57,11 @@ RUN mkdir -p /install/usr/lib && \
         : \
     ) && \
     rm -rf gcc-* libstdcxx-build libgcc-build && \
-    curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3)/openmp-$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3).src.tar.xz" | xzcat | tar -x && \
+    CLANG_VER="$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3)" && \
+    ( \
+        curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$CLANG_VER/openmp-$CLANG_VER.src.tar.xz" | xzcat | tar -x || \
+        ( curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$CLANG_VER/llvm-project-$CLANG_VER.src.tar.xz" | xzcat | tar -x && mv llvm-project-*.src/openmp openmp-current && rm -rf llvm-project-*.src ) \
+    ) && \
     ( \
         cd openmp-* && \
         sed -i .bak 's/include(LLVMCheckCompilerLinkerFlag)/function(llvm_check_compiler_linker_flag)\nendfunction()/' runtime/cmake/config-ix.cmake && \
