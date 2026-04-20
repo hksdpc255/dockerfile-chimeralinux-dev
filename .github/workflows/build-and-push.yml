@@ -121,7 +121,7 @@ jobs:
         sudo systemctl start podman.socket || :
         systemctl --user start podman.socket || :
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Buildah Action
       id: build-image
@@ -166,8 +166,9 @@ jobs:
 
     - name: Upload image as artifact
       if: steps.save-image.outcome == 'success' && steps.save-image.conclusion == 'success'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       continue-on-error: true
       with:
         name: chimeralinux-dev-${{ steps.get-tag.outputs.chimeralinux_version_id }}.docker.tar.zst
         path: /large_store/usertmp/chimeralinux-dev.docker.tar.zst
+        archive: false
