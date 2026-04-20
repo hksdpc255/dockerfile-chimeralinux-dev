@@ -59,7 +59,7 @@ RUN mkdir -p /install/usr/lib && \
     rm -rf gcc-* libstdcxx-build libgcc-build && \
     CLANG_VER="$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3)" && \
     ( \
-        curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$CLANG_VER/openmp-$CLANG_VER.src.tar.xz" | xzcat | tar -x || \
+        curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$CLANG_VER/openmp-$CLANG_VER.src.tar.xz" | xzcat | gtar -x || \
         ( curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$CLANG_VER/llvm-project-$CLANG_VER.src.tar.xz" | xzcat | tar -x && mv llvm-project-*.src/openmp openmp-current && rm -rf llvm-project-*.src ) \
     ) && \
     ( \
@@ -72,7 +72,7 @@ RUN mkdir -p /install/usr/lib && \
             -DLIBOMP_CXXFLAGS="$BUILD_CFLAGS" -DLIBOMP_LDFLAGS="$BUILD_LDFLAGS" \
             -DCMAKE_SHARED_LINKER_FLAGS="$BUILD_LDFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$BUILD_LDFLAGS -fPIE" \
             -DLIBOMP_ENABLE_SHARED=OFF -DLIBOMP_USE_INTERNODE_ALIGNMENT=ON -DLIBOMP_INSTALL_ALIASES=OFF && \
-        cmake --build build --config Release -j 16 && \
+        cmake --build build --config Release -j $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4) && \
         cmake --install build --prefix "$(pwd)/install" && \
         cp -a install/lib/libomp.a /install/usr/lib \
     ) && \
