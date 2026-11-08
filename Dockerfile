@@ -14,7 +14,7 @@ RUN apk add --upgrade --no-interactive \
         golangci-lint-langserver yq nmap fd git-lfs cloc go-task \
         $(apk list -q util-linux-* | \
                 sed -e /util-linux-.*-.*/d -e /-man/d -e /-doc/d -e /-common/d -e /-bashcomp/d) \
-        $(apk list -q *-static | sed -e /-cross-/d -e /-mallocng-/d) && \
+        $(apk list -q *-static | sed -e /-cross-/d -e /-mallocng-/d -e /wine-staging/d) && \
     rm -rf /var/cache/apk/* && \
     ln -srv /bin/doas /bin/sudo && \
     printf '%s\n' '' '# Give users in the wheelnopw group access.' 'permit nopass :wheelnopw' >> /etc/doas.conf && \
