@@ -48,34 +48,22 @@ RUN mkdir -p /install/usr/lib && \
         make install DESTDIR="$(pwd)/install" && \
         cp -a install/usr/lib/*.* /install/usr/lib && \
         rm -f /install/usr/lib/libstdc++.so && \
-        BUILD_DIR="$(pwd)/libgcc-build" && \
-        mkdir -p "${BUILD_DIR}" && \
-#        cd "${BUILD_DIR}" && \
-#        CXXFLAGS="-fPIC -g0 -O3 -pipe -nostdinc++" CFLAGS="-fPIC -g0 -O3 -pipe" CC=gcc CXX=g++ "${GCC_SOURCE}/configure" \
-#            --prefix=/usr --enable-shared --enable-static --disable-bootstrap --disable-multilib && \
-#        make all-target-libgcc -j$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4) && \
-#        make install-strip-target-libgcc DESTDIR="$(pwd)/install" && \
-#        cp install/usr/lib/gcc/x86_64-pc-linux-musl/15.2.0/libgcc* /usr/lib/gcc/*/*.0 && \
         : \
     ) && \
     rm -rf gcc-* libstdcxx-build libgcc-build && \
     CLANG_VER="$(clang --version | grep -i -F 'clang version' | cut -d " " -f 3)" && \
+    curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$CLANG_VER/llvm-project-$CLANG_VER.src.tar.xz" | xzcat | gtar -x && \
     ( \
-        curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$CLANG_VER/openmp-$CLANG_VER.src.tar.xz" | xzcat | gtar -x || \
-        ( curl -L "https://github.com/llvm/llvm-project/releases/download/llvmorg-$CLANG_VER/llvm-project-$CLANG_VER.src.tar.xz" | xzcat | tar -x && mv llvm-project-*.src/openmp openmp-current && rm -rf llvm-project-*.src ) \
-    ) && \
-    ( \
-        cd openmp-* && \
-        sed -i .bak 's/include(LLVMCheckCompilerLinkerFlag)/function(llvm_check_compiler_linker_flag)\nendfunction()/' runtime/cmake/config-ix.cmake && \
-        sed -i .bak '/include(ExtendPath)/d' runtime/src/CMakeLists.txt && \
-        cmake . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        cd llvm-project-*.src && \
+        cmake -S runtimes -B build -G Ninja -DLLVM_ENABLE_RUNTIMES=openmp -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_DOCS=OFF \
+            -DOPENMP_ENABLE_OMPT_TOOLS=OFF -DOPENMP_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
             -DCMAKE_C_FLAGS="$BUILD_CFLAGS" -DCMAKE_CXX_FLAGS="$BUILD_CFLAGS" -DLIBOMP_CPPFLAGS="$BUILD_CFLAGS" \
             -DLIBOMP_CXXFLAGS="$BUILD_CFLAGS" -DLIBOMP_LDFLAGS="$BUILD_LDFLAGS" \
             -DCMAKE_SHARED_LINKER_FLAGS="$BUILD_LDFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$BUILD_LDFLAGS -fPIE" \
             -DLIBOMP_ENABLE_SHARED=OFF -DLIBOMP_USE_INTERNODE_ALIGNMENT=ON -DLIBOMP_INSTALL_ALIASES=OFF && \
-        cmake --build build --config Release -j $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4) && \
-        cmake --install build --prefix "$(pwd)/install" && \
+        cmake --build build --config Release --target omp -j $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4) && \
+        cmake --install build --component openmp --prefix "$(pwd)/install" && \
         cp -a install/lib/libomp.a /install/usr/lib \
     ) && \
     rm -rf openmp-*
